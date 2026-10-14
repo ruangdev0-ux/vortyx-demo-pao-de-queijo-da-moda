@@ -20,6 +20,7 @@ Não é o sistema final de produção.
 8. Pedido Keeta **simulado**: chega, é aceito, entra no histórico e imprime a comanda
 9. Caixa do dia e fechamento com resumo impresso
 10. Botão discreto "Limpar dados da demonstração" na tela Caixa do dia
+11. Relatórios por período (hoje, 7, 30, 60, 90 dias ou datas escolhidas): faturamento, ticket médio, totais por forma de pagamento (Dinheiro, Pix, Débito, Crédito) e por origem, conferência com a maquininha, produtos vendidos e lista de vendas com detalhes
 
 ## Fora do escopo desta etapa
 
@@ -42,3 +43,10 @@ docs/screenshots/       telas em desktop, tablet e celular
 
 Tudo fica no `localStorage` deste navegador (chave `vortyx-demo-pqm-v1`).
 A demo não usa banco de dados externo nem dados reais de clientes.
+
+Ao fechar o caixa, as vendas do dia ficam guardadas no próprio navegador e alimentam a tela **Relatórios**.
+Por isso, nesta demonstração os relatórios só enxergam as vendas feitas **neste navegador e neste aparelho**,
+e somem se os dados do navegador forem apagados (ou com "Limpar dados da demonstração").
+
+**Na versão definitiva** será necessário um banco de dados para ter histórico confiável de longo prazo,
+backup e acesso em mais de um dispositivo (caixa, celular da proprietária etc.).
