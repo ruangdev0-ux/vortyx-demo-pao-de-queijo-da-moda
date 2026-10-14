@@ -25,7 +25,8 @@
   const ADD = Object.fromEntries(ADICIONAIS.map((a) => [a.id, a]));
 
   /* ---------- estado ---------- */
-  const novoEstado = () => ({ caixa: null, vendas: [], keeta: [], carrinho: [], fechamentos: [] });
+  // vendas = caixa aberto agora; arquivo = vendas de caixas já fechados (usadas nos Relatórios)
+  const novoEstado = () => ({ caixa: null, vendas: [], keeta: [], carrinho: [], fechamentos: [], arquivo: [] });
   let S;
   try { S = Object.assign(novoEstado(), JSON.parse(localStorage.getItem(CHAVE)) || {}); }
   catch (e) { S = novoEstado(); }
@@ -61,6 +62,7 @@
   $('#ab-fundo').addEventListener('input', () => $$('#ab-atalhos button').forEach((x) => x.classList.remove('sel')));
   $('#btn-abrir').addEventListener('click', () => {
     S.caixa = { aberto: true, abertoEm: new Date().toISOString(), fundo: parseReais($('#ab-fundo').value), seq: 0 };
+    if (S.vendas.length) S.arquivo = S.arquivo.concat(S.vendas); // segurança: nunca perder vendas antigas
     S.vendas = []; S.keeta = []; S.carrinho = [];
     salvar();
     entrarApp();
@@ -83,6 +85,7 @@
     if (v === 'keeta') renderKeeta();
     if (v === 'historico') renderHistorico();
     if (v === 'caixa') renderCaixa();
+    if (v === 'relatorios') renderRelatorios();
     window.scrollTo(0, 0);
   }
   $('#abas').addEventListener('click', (e) => { const b = e.target.closest('button'); if (b) irPara(b.dataset.view); });
@@ -328,6 +331,7 @@
       unit: PROD[i.id].preco + i.adds.reduce((s, a) => s + ADD[a].preco, 0)
     }));
     const v = Object.assign({
+      id: Date.now().toString(36) + '-' + S.caixa.seq,
       num: S.caixa.seq,
       quando: new Date().toISOString(),
       itens,
@@ -592,6 +596,7 @@
       const txt = $('#fc-contado').value.trim();
       const f = { abertoEm: S.caixa.abertoEm, fechadoEm: new Date().toISOString(), fundo: S.caixa.fundo, esperado, contado: txt ? parseReais(txt) : null, resumo: r };
       S.fechamentos.push(f);
+      S.arquivo = S.arquivo.concat(S.vendas); // guarda as vendas para os Relatórios
       S.caixa = null; S.vendas = []; S.keeta = []; S.carrinho = [];
       salvar();
       const html = fechamentoHtml(f);
@@ -610,6 +615,129 @@
       S = novoEstado(); mostrarAbertura();
     });
   });
+
+
+  /* ---------- relatórios por período ----------
+   * Usa somente as vendas salvas neste navegador (arquivo de caixas fechados + caixa aberto).
+   * Na versão definitiva estes dados virão de um banco de dados (histórico longo, backup, vários aparelhos).
+   */
+  const rel = { periodo: 'hoje', de: null, ate: null, origem: 'todas', pg: 'todos', lista: [] };
+  const inicioDia = (d) => { const x = new Date(d); x.setHours(0, 0, 0, 0); return x; };
+  const fimDia = (d) => { const x = new Date(d); x.setHours(23, 59, 59, 999); return x; };
+  const isoData = (d) => { const x = new Date(d); return x.getFullYear() + '-' + String(x.getMonth() + 1).padStart(2, '0') + '-' + String(x.getDate()).padStart(2, '0'); };
+  const dataBR = (d) => new Date(d).toLocaleDateString('pt-BR');
+  const lerDataInput = (v) => { const [a, m, d] = v.split('-').map(Number); return new Date(a, m - 1, d); };
+
+  function intervaloRel() {
+    const hoje = new Date();
+    if (rel.periodo === 'custom') return { ini: inicioDia(rel.de), fim: fimDia(rel.ate) };
+    const dias = rel.periodo === 'hoje' ? 1 : +rel.periodo;
+    const ini = inicioDia(hoje); ini.setDate(ini.getDate() - (dias - 1));
+    return { ini, fim: fimDia(hoje) };
+  }
+  function vendasRel() {
+    const { ini, fim } = intervaloRel();
+    return (S.arquivo || []).concat(S.vendas || [])
+      .filter((v) => { const t = new Date(v.quando); return t >= ini && t <= fim; })
+      .sort((a, b) => new Date(b.quando) - new Date(a.quando));
+  }
+
+  $('#rel-periodos').addEventListener('click', (e) => {
+    const b = e.target.closest('button'); if (!b) return;
+    rel.periodo = b.dataset.p;
+    if (rel.periodo === 'custom' && !rel.de) {
+      const h = new Date(); const i = new Date(); i.setDate(i.getDate() - 6);
+      rel.de = i; rel.ate = h; $('#rel-de').value = isoData(i); $('#rel-ate').value = isoData(h);
+    }
+    renderRelatorios();
+  });
+  $('#rel-aplicar').addEventListener('click', () => {
+    const de = $('#rel-de').value, ate = $('#rel-ate').value;
+    if (!de || !ate) { toast('Escolha a data inicial e a data final.'); return; }
+    if (de > ate) { toast('A data inicial precisa ser antes da data final.'); return; }
+    rel.de = lerDataInput(de); rel.ate = lerDataInput(ate); renderRelatorios();
+  });
+  $('#rel-f-origem').addEventListener('click', (e) => { const b = e.target.closest('button'); if (!b) return; rel.origem = b.dataset.f; renderRelatorios(); });
+  $('#rel-f-pg').addEventListener('click', (e) => { const b = e.target.closest('button'); if (!b) return; rel.pg = b.dataset.f; renderRelatorios(); });
+  $('#rel-lista').addEventListener('click', (e) => {
+    const b = e.target.closest('[data-k]'); if (!b) return;
+    mostrarRecibo(rel.lista[+b.dataset.k]);
+  });
+
+  function renderRelatorios() {
+    $$('#rel-periodos button').forEach((b) => b.classList.toggle('ativo', b.dataset.p === rel.periodo));
+    $$('#rel-f-origem button').forEach((b) => b.classList.toggle('ativo', b.dataset.f === rel.origem));
+    $$('#rel-f-pg button').forEach((b) => b.classList.toggle('ativo', b.dataset.f === rel.pg));
+    $('#rel-custom').hidden = rel.periodo !== 'custom';
+    const { ini, fim } = intervaloRel();
+    $('#rel-periodo-txt').textContent = isoData(ini) === isoData(fim) ? dataBR(ini) : `${dataBR(ini)} a ${dataBR(fim)}`;
+
+    const vs = vendasRel();
+    const soma = (f) => vs.filter(f).reduce((s, v) => s + v.total, 0);
+    const conta = (f) => vs.filter(f).length;
+    const total = soma(() => true), n = vs.length;
+    const nB = conta((v) => v.origem === 'balcao'), nK = conta((v) => v.origem === 'keeta');
+
+    // produtos
+    const prods = {}; const adds = {};
+    vs.forEach((v) => v.itens.forEach((i) => {
+      const k = i.id || i.nome; const p = prods[k] || (prods[k] = { nome: (PROD[i.id] && PROD[i.id].nome) || i.nome, qtd: 0, valor: 0 });
+      p.qtd += i.qtd; p.valor += i.unit * i.qtd;
+      (i.adds || []).forEach((a) => { adds[a.nome] = (adds[a.nome] || 0) + i.qtd; });
+    }));
+    const ranking = Object.values(prods).sort((a, b) => b.qtd - a.qtd || b.valor - a.valor || a.nome.localeCompare(b.nome));
+    const topo = ranking.length ? ranking.filter((p) => p.qtd === ranking[0].qtd) : [];
+    const sub = (t) => `<span class="kpi-sub">${t}</span>`;
+    const pl = (x, s1, s2) => x + ' ' + (x === 1 ? s1 : s2);
+
+    $('#rel-kpis').innerHTML = `
+      <div class="kpi destaque"><small>Faturamento do período</small><b>${brl(total)}</b></div>
+      <div class="kpi"><small>Vendas</small><b>${n}</b></div>
+      <div class="kpi"><small>Ticket médio</small><b>${brl(n ? Math.round(total / n) : 0)}</b></div>
+      <div class="kpi"><small>Balcão</small><b>${brl(soma((v) => v.origem === 'balcao'))}</b>${sub(pl(nB, 'pedido', 'pedidos'))}</div>
+      <div class="kpi"><small>Delivery (Keeta)</small><b>${brl(soma((v) => v.origem === 'keeta'))}</b>${sub(pl(nK, 'pedido', 'pedidos'))}</div>
+      <div class="kpi"><small>Dinheiro</small><b>${brl(soma((v) => v.pagamento === 'dinheiro'))}</b></div>
+      <div class="kpi"><small>Pix</small><b>${brl(soma((v) => v.pagamento === 'pix'))}</b></div>
+      <div class="kpi"><small>Débito</small><b>${brl(soma((v) => v.pagamento === 'debito'))}</b></div>
+      <div class="kpi"><small>Crédito</small><b>${brl(soma((v) => v.pagamento === 'credito'))}</b></div>
+      <div class="kpi kpi-largo"><small>Produto mais vendido</small><b class="kpi-texto">${!topo.length ? '—' : topo.length > 2 ? `${topo.length} produtos empatados` : esc(topo.map((p) => p.nome).join(' e '))}</b>${topo.length ? sub(pl(topo[0].qtd, 'unidade', 'unidades') + (topo.length > 1 ? ' cada (empate)' : '')) : ''}</div>`;
+
+    // conferência: forma x origem
+    const formas = ['dinheiro', 'pix', 'debito', 'credito'].concat(vs.some((v) => v.pagamento === 'cartao') ? ['cartao'] : []);
+    const cel = (f, o) => soma((v) => v.pagamento === f && (!o || v.origem === o));
+    $('#rel-conferencia').innerHTML = `<h3>Conferência por forma de pagamento</h3>
+      <div class="tabela-rolagem"><table class="conf">
+        <thead><tr><th>Forma</th><th>Balcão</th><th>Keeta</th><th>Total</th></tr></thead>
+        <tbody>${formas.map((f) => `<tr class="${f === 'debito' || f === 'credito' ? 'maq' : ''}"><td>${PG_CURTO[f]}</td><td>${brl(cel(f, 'balcao'))}</td><td>${brl(cel(f, 'keeta'))}</td><td><b>${brl(cel(f))}</b></td></tr>`).join('')}</tbody>
+        <tfoot><tr><td>Total</td><td>${brl(soma((v) => v.origem === 'balcao'))}</td><td>${brl(soma((v) => v.origem === 'keeta'))}</td><td>${brl(total)}</td></tr></tfoot>
+      </table></div>
+      <p class="muted conf-nota">Para conferir com a maquininha, compare as linhas <b>Débito</b> e <b>Crédito</b> da coluna Balcão. Nesta demo, os pedidos Keeta são pagos no app e não passam pela maquininha.</p>`;
+
+    const listaAdds = Object.entries(adds).sort((a, b) => b[1] - a[1]);
+    $('#rel-produtos').innerHTML = `<h3>Quantidade vendida por produto</h3>
+      ${ranking.length ? `<div class="tabela-rolagem"><table class="conf conf-prod">
+        <thead><tr><th>Produto</th><th>Qtd</th><th>Valor*</th></tr></thead>
+        <tbody>${ranking.map((p) => `<tr><td>${esc(p.nome)}</td><td>${p.qtd}</td><td>${brl(p.valor)}</td></tr>`).join('')}</tbody>
+      </table></div>
+      ${listaAdds.length ? `<p class="rel-adds"><b>Adicionais:</b> ${listaAdds.map(([k, q]) => `${esc(k)} ${q}`).join(' · ')}</p>` : ''}
+      <p class="muted conf-nota">*Valor inclui os adicionais escolhidos no item.</p>` : '<p class="muted">Nenhuma venda neste período.</p>'}`;
+
+    // lista filtrada
+    rel.lista = vs.filter((v) => (rel.origem === 'todas' || v.origem === rel.origem) && (rel.pg === 'todos' || v.pagamento === rel.pg));
+    const tl = rel.lista.reduce((s, v) => s + v.total, 0);
+    $('#rel-lista-resumo').textContent = `${pl(rel.lista.length, 'venda', 'vendas')} · ${brl(tl)}`;
+    $('#rel-lista').innerHTML = !rel.lista.length ? `<div class="vazio">Nenhuma venda ${n ? 'com esses filtros' : 'registrada neste período'}.</div>` :
+      `<div class="hrow rrow cab"><span>Data</span><span>Hora</span><span>Pedido</span><span>Origem</span><span>Pagamento</span><span style="text-align:right">Valor</span><span></span></div>` +
+      rel.lista.map((v, k) => `<button class="hrow rrow" data-k="${k}">
+        <span class="r-data">${dataBR(v.quando)}</span>
+        <span class="hora">${hora(v.quando)}</span>
+        <span class="num">Nº ${pad(v.num)}</span>
+        <span class="r-origem"><span class="origem ${v.origem}">${v.origem === 'keeta' ? 'Keeta' : 'Balcão'}</span></span>
+        <span class="pg">${PG_CURTO[v.pagamento] || v.pagamento}</span>
+        <span class="valor">${brl(v.total)}</span>
+        <span class="seta">›</span>
+      </button>`).join('');
+  }
 
   /* ---------- confirmação dentro da página ---------- */
   function confirmar(msg, ok, acao) {
