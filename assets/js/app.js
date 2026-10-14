@@ -18,7 +18,9 @@
     const v = parseFloat(String(txt).replace(/[^\d,.-]/g, '').replace(/\.(?=\d{3}(\D|$))/g, '').replace(',', '.'));
     return isNaN(v) ? 0 : Math.round(v * 100);
   };
-  const PG = { dinheiro: 'Dinheiro', pix: 'Pix', cartao: 'Cartão' };
+  // 'cartao' = forma antiga (antes da separação débito/crédito), mantida só para exibir dados já salvos
+  const PG = { dinheiro: 'Dinheiro', pix: 'Pix', debito: 'Cartão de Débito', credito: 'Cartão de Crédito', cartao: 'Cartão (registro antigo)' };
+  const PG_CURTO = { dinheiro: 'Dinheiro', pix: 'Pix', debito: 'Débito', credito: 'Crédito', cartao: 'Cartão (antigo)' };
   const PROD = Object.fromEntries(PRODUTOS.map((p) => [p.id, p]));
   const ADD = Object.fromEntries(ADICIONAIS.map((a) => [a.id, a]));
 
@@ -259,7 +261,7 @@
         </div>`;
       }
       if (forma === 'pix') return `<div class="painel-forma info-sim"><div class="grande-ico">Pix</div><div><span class="tag-sim">Simulação</span><br>Na versão final, o QR Code de cobrança aparece aqui. Nesta demo, apenas confirme que o Pix foi recebido.</div></div>`;
-      if (forma === 'cartao') return `<div class="painel-forma info-sim"><div class="grande-ico">▭</div><div><span class="tag-sim">Simulação</span><br>Passe o cartão na maquininha normalmente. Nesta demo não há ligação com a maquininha — apenas confirme a aprovação.</div></div>`;
+      if (forma === 'debito' || forma === 'credito') return `<div class="painel-forma info-sim"><div class="grande-ico">▭</div><div><span class="tag-sim">Simulação</span><br>Passe o cartão na maquininha na função <b>${forma === 'debito' ? 'débito' : 'crédito'}</b>. Nesta demo não há ligação com a maquininha — apenas confirme a aprovação.</div></div>`;
       return '';
     };
     const trocoHtml = () => {
@@ -277,7 +279,8 @@
           <div class="formas">
             <button class="forma ${forma === 'dinheiro' ? 'sel' : ''}" data-forma="dinheiro"><span class="ico">R$</span>Dinheiro</button>
             <button class="forma ${forma === 'pix' ? 'sel' : ''}" data-forma="pix"><span class="ico">◆</span>Pix</button>
-            <button class="forma ${forma === 'cartao' ? 'sel' : ''}" data-forma="cartao"><span class="ico">▭</span>Cartão</button>
+            <button class="forma ${forma === 'debito' ? 'sel' : ''}" data-forma="debito"><span class="ico">▭</span>Cartão de Débito</button>
+            <button class="forma ${forma === 'credito' ? 'sel' : ''}" data-forma="credito"><span class="ico">▭</span>Cartão de Crédito</button>
           </div>
           ${painel()}
         </div>
@@ -371,7 +374,7 @@
       ${linhas}
       <div class="sep"></div>
       <div class="l tot"><span>TOTAL</span><span>${brl(v.total)}</span></div>
-      <div class="l"><span>Pagamento</span><span>${PG[v.pagamento]}${keeta ? ' (app)' : ''}</span></div>
+      <div class="l"><span>Pagamento</span><span>${PG[v.pagamento] || v.pagamento}${keeta ? ' (app)' : ''}</span></div>
       ${v.recebido != null ? `<div class="l"><span>Recebido</span><span>${brl(v.recebido)}</span></div><div class="l b"><span>Troco</span><span>${brl(v.troco)}</span></div>` : ''}
       <div class="sep"></div>
       <div class="c">${esc(LOJA.frase)}!</div>
@@ -388,7 +391,7 @@
   function mostrarRecibo(v, { novaVenda = false } = {}) {
     const keeta = v.origem === 'keeta';
     abrirModal(`
-      <div class="m-topo"><div><h3>${novaVenda ? (keeta ? 'Pedido aceito' : 'Venda concluída') : 'Comprovante'} · nº ${pad(v.num)}</h3><p>${brl(v.total)} · ${PG[v.pagamento]} · ${keeta ? 'Keeta' : 'Balcão'}</p></div><button class="m-x" data-fechar aria-label="Fechar">×</button></div>
+      <div class="m-topo"><div><h3>${novaVenda ? (keeta ? 'Pedido aceito' : 'Venda concluída') : 'Comprovante'} · nº ${pad(v.num)}</h3><p>${brl(v.total)} · ${PG[v.pagamento] || v.pagamento} · ${keeta ? 'Keeta' : 'Balcão'}</p></div><button class="m-x" data-fechar aria-label="Fechar">×</button></div>
       <div class="m-corpo"><div class="recibo-palco">${reciboHtml(v)}</div></div>
       <div class="m-rodape">
         <button class="btn btn-claro btn-lg" id="rc-print">${keeta ? 'Imprimir comanda' : 'Imprimir comprovante'}</button>
@@ -417,7 +420,7 @@
       keetaId: 'KT-' + String(Math.floor(100000 + Math.random() * 900000)),
       chegou: new Date().toISOString(),
       itens, total,
-      pagamento: sorteia(['pix', 'cartao', 'pix'])
+      pagamento: sorteia(['pix', 'debito', 'credito'])
     };
   }
 
@@ -457,7 +460,7 @@
       <article class="kcard">
         <div class="kcard-topo"><b>Keeta · ${esc(p.keetaId)}</b><span class="kcard-novo">Novo pedido</span></div>
         <div class="kcard-corpo">
-          <div class="kcard-meta"><span>Recebido às ${hora(p.chegou)}</span><span>Pagamento: ${PG[p.pagamento]} (pago no app · simulado)</span></div>
+          <div class="kcard-meta"><span>Recebido às ${hora(p.chegou)}</span><span>Pagamento: ${PG[p.pagamento] || p.pagamento} (pago no app · simulado)</span></div>
           ${p.itens.map((it) => `<div class="kitem"><span>${it.qtd}x ${esc(PROD[it.id].nome)}${it.adds.map((a) => `<small>+ ${esc(ADD[a].nome)}</small>`).join('')}</span><span>${brl((PROD[it.id].preco + it.adds.reduce((x, a) => x + ADD[a].preco, 0)) * it.qtd)}</span></div>`).join('')}
           <div class="ktotal"><span>Total</span><span>${brl(p.total)}</span></div>
         </div>
@@ -501,7 +504,7 @@
         <span class="hora">${hora(v.quando)}</span>
         <span class="num">Nº ${pad(v.num)}</span>
         <span class="itens-resumo">${v.itens.map((i) => i.qtd + 'x ' + esc(PROD[i.id] ? PROD[i.id].curto : i.nome)).join(', ')}</span>
-        <span class="origem-cel"><span class="origem ${v.origem}">${v.origem === 'keeta' ? 'Keeta' : 'Balcão'}</span> <span class="pg">${PG[v.pagamento]}</span></span>
+        <span class="origem-cel"><span class="origem ${v.origem}">${v.origem === 'keeta' ? 'Keeta' : 'Balcão'}</span> <span class="pg">${PG_CURTO[v.pagamento] || v.pagamento}</span></span>
         <span class="valor pgv">${brl(v.total)}</span>
         <span class="seta">›</span>
       </button>`).join('');
@@ -517,7 +520,8 @@
     const conta = (f) => S.vendas.filter(f).length;
     return {
       total: soma(() => true), pedidos: S.vendas.length,
-      dinheiro: soma((v) => v.pagamento === 'dinheiro'), pix: soma((v) => v.pagamento === 'pix'), cartao: soma((v) => v.pagamento === 'cartao'),
+      dinheiro: soma((v) => v.pagamento === 'dinheiro'), pix: soma((v) => v.pagamento === 'pix'), debito: soma((v) => v.pagamento === 'debito'), credito: soma((v) => v.pagamento === 'credito'),
+      cartao: soma((v) => v.pagamento === 'cartao'),
       balcao: soma((v) => v.origem === 'balcao'), keeta: soma((v) => v.origem === 'keeta'),
       nBalcao: conta((v) => v.origem === 'balcao'), nKeeta: conta((v) => v.origem === 'keeta'),
       dinheiroBalcao: soma((v) => v.pagamento === 'dinheiro' && v.origem === 'balcao')
@@ -529,16 +533,17 @@
     const r = resumo();
     $('#cx-abertura').textContent = `Aberto às ${hora(S.caixa.abertoEm)} · fundo de troco ${brl(S.caixa.fundo)}`;
     $('#kpis').innerHTML = `
-      <div class="kpi destaque"><small>Total vendido hoje</small><b>${brl(r.total)}</b></div>
-      <div class="kpi"><small>Pedidos</small><b>${r.pedidos}</b></div>
+      <div class="kpi destaque"><small>Total vendido hoje · ${r.pedidos} pedido${r.pedidos === 1 ? '' : 's'}</small><b>${brl(r.total)}</b></div>
       <div class="kpi"><small>Vendas no balcão</small><b>${brl(r.balcao)}</b></div>
       <div class="kpi"><small>Vendas delivery (Keeta)</small><b>${brl(r.keeta)}</b></div>
       <div class="kpi"><small>Dinheiro</small><b>${brl(r.dinheiro)}</b></div>
       <div class="kpi"><small>Pix</small><b>${brl(r.pix)}</b></div>
-      <div class="kpi"><small>Cartão</small><b>${brl(r.cartao)}</b></div>
+      <div class="kpi"><small>Débito</small><b>${brl(r.debito)}</b></div>
+      <div class="kpi"><small>Crédito</small><b>${brl(r.credito)}</b></div>
+      ${r.cartao ? `<div class="kpi"><small>Cartão (registro antigo)</small><b>${brl(r.cartao)}</b></div>` : ''}
 `;
     $('#cx-pagamentos').innerHTML = `<h3>Por forma de pagamento</h3>
-      ${barra('dinheiro', 'Dinheiro', r.dinheiro, r.total)}${barra('pix', 'Pix', r.pix, r.total)}${barra('cartao', 'Cartão', r.cartao, r.total)}
+      ${barra('dinheiro', 'Dinheiro', r.dinheiro, r.total)}${barra('pix', 'Pix', r.pix, r.total)}${barra('debito', 'Débito', r.debito, r.total)}${barra('credito', 'Crédito', r.credito, r.total)}${r.cartao ? barra('cartao', 'Cartão (registro antigo)', r.cartao, r.total) : ''}
       <div class="gaveta-esperada"><span>Dinheiro esperado na gaveta</span><span>${brl(S.caixa.fundo + r.dinheiroBalcao)}</span></div>`;
     $('#cx-origens').innerHTML = `<h3>Por origem</h3>
       ${barra('balcao', 'Balcão', r.balcao, r.total, ` · ${r.nBalcao} pedido${r.nBalcao === 1 ? '' : 's'}`)}
@@ -557,7 +562,7 @@
       <div class="sep"></div>
       ${L('Pedidos', r.pedidos)}${L('  Balcão', r.nBalcao)}${L('  Keeta', r.nKeeta)}
       <div class="sep"></div>
-      ${L('Dinheiro', brl(r.dinheiro))}${L('Pix', brl(r.pix))}${L('Cartão', brl(r.cartao))}
+      ${L('Dinheiro', brl(r.dinheiro))}${L('Pix', brl(r.pix))}${L('Débito', brl(r.debito || 0))}${L('Crédito', brl(r.credito || 0))}${r.cartao ? L('Cartão (antigo)', brl(r.cartao)) : ''}
       <div class="sep"></div>
       ${L('Balcão', brl(r.balcao))}${L('Delivery Keeta', brl(r.keeta))}
       <div class="sep"></div>
