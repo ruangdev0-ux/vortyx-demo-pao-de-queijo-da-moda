@@ -13,7 +13,7 @@ Não é o sistema final de produção.
 1. Abertura de caixa, com fundo de troco, data e hora
 2. Venda no balcão por categorias, com adicionais (Requeijão, Cream Cheese, Cheddar)
 3. Pedido atual: quantidade, adicionais, remover, limpar e finalizar
-4. Pagamento em Dinheiro (com troco), Pix ou Cartão, **simulados**
+4. Pagamento em Dinheiro (com troco), Pix, Cartão de Débito ou Cartão de Crédito, **simulados**
 5. Abertura da gaveta, **simulada**
 6. Comprovante em estilo bobina térmica, com `window.print()` em 80 mm
 7. Histórico da sessão, com origem Balcão ou Keeta
